@@ -61,10 +61,10 @@ base_seed = 20251112
 
 # Demand / uncertainty (RLTP-style)
 demand_low, demand_high = 0.0, 20000.0
-epsilon_low, epsilon_high = 0.15, 1.0
+epsilon_low, epsilon_high = 0.15, 0.4
 
 # Revenue (RCR)
-nu_low, nu_high = 1.5, 2.0  # scalar price shared across arcs
+nu_low, nu_high = 1, 1.2  # scalar price shared across arcs
 
 # Opening costs and capacities
 open_cost_low, open_cost_high = 30000.0, 50000.0
@@ -101,6 +101,14 @@ def euclidean_distances(F, C):
 
 def format_float(x):
     return f"{x:.6f}"
+
+def format_int(x):
+    # Convert to int even if x is a float or numpy scalar
+    try:
+        xi = int(round(float(x)))
+    except Exception:
+        xi = int(x)
+    return f"{xi:d}"
 
 def gamma_max_from_string(s, m):
     """
@@ -149,14 +157,14 @@ def write_instance_txt(path, meta_dict, facilities, customers, d_matrix,
         f.write("FACILITIES  # columns: i x y c_i P_i\n")
         for (i, x, y, c_i, P_i) in facilities:
             f.write(f"{i} {format_float(x)} {format_float(y)} "
-                    f"{format_float(c_i)} {format_float(P_i)}\n")
+                    f"{format_int(c_i)} {format_int(P_i)}\n")
         f.write("\n")
 
         # Customers
         f.write("CUSTOMERS  # columns: j x y Dbar_j Dhat_j\n")
         for (j, x, y, Dbar, Dhat) in customers:
             f.write(f"{j} {format_float(x)} {format_float(y)} "
-                    f"{format_float(Dbar)} {format_float(Dhat)}\n")
+                    f"{format_int(Dbar)} {format_int(Dhat)}\n")
         f.write("\n")
 
         # Shipping matrix

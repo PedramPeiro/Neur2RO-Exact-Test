@@ -56,7 +56,7 @@ import math
 # ----------------------------
 
 sizes = [(5, 10), (5, 15), (10, 15), (10, 20), (20, 40)]
-replicas_per_size = 10
+replicas_per_size = 30
 base_seed = 20251112
 
 # Demand / uncertainty (RLTP-style)
@@ -64,10 +64,10 @@ demand_low, demand_high = 0.0, 20000.0
 epsilon_low, epsilon_high = 0.15, 0.4
 
 # Revenue (RCR)
-nu_low, nu_high = 1, 1.2  # scalar price shared across arcs
+nu_low, nu_high = 1.4, 1.8  # scalar price shared across arcs
 
 # Opening costs and capacities
-open_cost_low, open_cost_high = 30000.0, 50000.0
+open_cost_low, open_cost_high = 15000.0, 30000.0
 capacity_low, capacity_high = 0.0, 50000.0
 
 # IR feasibility scaling
@@ -407,7 +407,7 @@ def main():
                 seed_rcr = base_seed + 1000 * n + 10 * m + rep + 100000 * attempts
                 facs_rcr, custs_rcr, dmat_rcr, rmat_rcr, meta_rcr = generate_RCR_instance(n, m, seed_rcr)
                 if test_RCR_instance(facs_rcr, custs_rcr, dmat_rcr, rmat_rcr, meta_rcr, verbose=True):
-                    fname_rcr = f"RCR_n{n}_m{m}_rep{rep}_seed{seed_rcr}.txt"
+                    fname_rcr = f"RCR_n{n}_m{m}_rep{rep}.txt"
                     path_rcr = out_RCR / fname_rcr
                     write_instance_txt(path_rcr, meta_rcr, facs_rcr, custs_rcr,
                                        dmat_rcr, instance_type="RCR", r_matrix=rmat_rcr)
@@ -425,7 +425,7 @@ def main():
                 seed_ir = base_seed + 2000 * n + 20 * m + rep + 100000 * attempts
                 facs_ir, custs_ir, dmat_ir, meta_ir = generate_IR_instance(n, m, seed_ir)
                 if test_IR_instance(facs_ir, custs_ir, dmat_ir, meta_ir, verbose=True):
-                    fname_ir = f"IR_n{n}_m{m}_rep{rep}_seed{seed_ir}.txt"
+                    fname_ir = f"IR_n{n}_m{m}_rep{rep}.txt"
                     path_ir = out_IR / fname_ir
                     write_instance_txt(path_ir, meta_ir, facs_ir, custs_ir,
                                        dmat_ir, instance_type="IR", r_matrix=None)

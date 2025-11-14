@@ -285,8 +285,8 @@ def read_instance(path: str) -> Dict[str, Any]:
     # -------------------------
     data: Dict[str, Any] = {
         "instance_type": instance_type,
-        "n": n,
-        "m": m,
+        "N": n,
+        "M": m,
         "c": c_list,         # opening cost c_i
         "P": P_list,         # capacity P_i
         "Dbar": Dbar_list,   # nominal demand Dbar_j

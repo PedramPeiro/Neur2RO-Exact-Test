@@ -55,10 +55,10 @@ def _add_constraints(
 
     # Epigraph constraints per vertex (worst-case profit)
     mdl.addConstrs(
-        (t <= gp.quicksum(
-                (revenue[i][j] - ship_cost[i][j]) * Y[k, i, j]
+        (t >= gp.quicksum(
+                -(revenue[i][j] - ship_cost[i][j]) * Y[k, i, j]
                 for i in N
-                for j in M) - gp.quicksum(opening_cost[i] * X[i] for i in N) for k in K), name = "epigraph_constr")
+                for j in M) + gp.quicksum(opening_cost[i] * X[i] for i in N) for k in K), name = "epigraph_constr")
 
 
 
@@ -130,7 +130,7 @@ def main() -> None:
     )
 
     # Maximize worst-case profit t
-    mdl.setObjective(t, GRB.MAXIMIZE)
+    mdl.setObjective(t, GRB.MINIMIZE)
     mdl.optimize()
 
     runtime = mdl.Runtime

@@ -13,7 +13,7 @@ def _add_variables(mdl: gp.Model, N, M):
 
 def _add_constraints(mdl: gp.Model, X, Y, demand, capacity, N, M):
     mdl.addConstrs(
-        (gp.quicksum(Y[i, j] for i in N) <= demand[j] for j in M)
+        (gp.quicksum(Y[i, j] for i in N) >= demand[j] for j in M)
         , name="demand_constr")
     mdl.addConstrs(
         (gp.quicksum(Y[i, j] for j in M) <= capacity[i] * X[i] for i in N)
@@ -28,14 +28,14 @@ def main() -> None:
     run_dir, gru_dir, txt_log = utils.prepare_paths(
         method = "MIP",
         environment = "Deterministic",
-        category="RCR",
+        category="IR",
         instance = args.instance,
         budget = None,
         out_root = args.output_root
     )
     
     param = utils.load_instance(args.instance, args.data_dir)
-    N, M, openning_cost, capacity, demand, shipping_cost, revenue = (
+    N, M, openning_cost, capacity, demand, shipping_cost, _  = (
         list(range(param["N"])),
         list(range(param["M"])),
         param["c"],
@@ -46,7 +46,7 @@ def main() -> None:
     )
     
     # ---------- model ------------------------------------------------------
-    mdl = utils.init_model(f"MIP_Det_RCR_{args.instance}",
+    mdl = utils.init_model(f"MIP_Det_IR_{args.instance}",
                            args.time_limit,
                            gru_dir / f"gurobi_{args.instance}.log",
                            args.tolerance)
@@ -59,7 +59,7 @@ def main() -> None:
     _add_constraints(mdl, X, Y, demand, capacity, N, M)
         
     obj = gp.quicksum(openning_cost[i] * X[i] for i in N) + \
-            gp.quicksum((shipping_cost[i][j] - revenue[i][j]) * Y[i, j] for i in N for j in M)
+            gp.quicksum(shipping_cost[i][j] * Y[i, j] for i in N for j in M)
    
     mdl.setObjective(obj, GRB.MINIMIZE)
     mdl.optimize()

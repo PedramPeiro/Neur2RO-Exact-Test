@@ -45,9 +45,9 @@ def parse_cli() -> argparse.Namespace:
         description="Run deterministic FL MIP instance",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--instance", type=str, default="RCR_n20_m40_rep9")
+    parser.add_argument("--instance", type=str, default="IR_n20_m40_rep9")
     parser.add_argument("--time_limit", type=int, default=1200)
-    parser.add_argument("--data_dir", type=str, default="../data/instances_RCR")
+    parser.add_argument("--data_dir", type=str, default="../data/instances_IR")
     parser.add_argument("--tolerance", type=float, default=1e-6)
     parser.add_argument(
         "--output_root",
@@ -69,16 +69,16 @@ def make_run_dirs(output_root: Union[str, Path], category: str) -> Path:
     (run_dir / "Gurobi_logs").mkdir(parents=True, exist_ok=True)
     return run_dir
 
-def prepare_paths(method: str, environment: str, instance: int, budget: float | None, out_root: Union[str, Path]) -> tuple[Path, Path, Path]:
+def prepare_paths(method: str, environment: str, instance: int, category: str, budget: float | None, out_root: Union[str, Path]) -> tuple[Path, Path, Path]:
     """Return *(run_dir, gurobi_dir, txt_log_path)* and create folders."""
     ts       = datetime.now().strftime("%Y%m%d%H")
-    run_dir  = Path(out_root) / f"log_{method}_{environment}" / ts
+    run_dir  = Path(out_root) / f"log_{method}_{environment}_{category}" / ts
     gru_dir  = run_dir / "Gurobi_logs" / f"instance_{instance}_{method}"
     gru_dir.mkdir(parents=True, exist_ok=True)
     if budget is None:
-        txt_log  = run_dir / f"log_I{instance}_{method}.txt"
+        txt_log  = run_dir / f"log_{instance}_{method}.txt"
     else:
-        txt_log  = run_dir / f"log_I{instance}_{method}_{int(budget*100)}.txt"
+        txt_log  = run_dir / f"log_{instance}_{method}_{int(budget*100)}.txt"
     return run_dir, gru_dir, txt_log
 
 

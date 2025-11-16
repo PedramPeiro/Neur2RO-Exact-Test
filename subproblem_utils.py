@@ -35,9 +35,9 @@ def build_and_solve_slave_CCG_RCR(
     n = c.shape[0]
     m = D_bar.shape[0]
     
-    M_alpha = utils.compute_M_alpha(pi, D_bar, D_hat, Gamma)          # shape (m,)
-    M_beta  = utils.compute_M_beta(pi, P, x_star)                     # shape (n,)
-    M_gamma = utils.compute_M_gamma(M_alpha, M_beta, P, D_bar, D_hat, # shape (n,m)
+    M_alpha = utils.compute_M_alpha_RCR(pi, D_bar, D_hat, Gamma)          # shape (m,)
+    M_beta  = utils.compute_M_beta_RCR(pi, P, x_star)                     # shape (n,)
+    M_gamma = utils.compute_M_gamma_RCR(M_alpha, M_beta, P, D_bar, D_hat, # shape (n,m)
                               x_star, Gamma)
 
     mdl = utils.init_model(
@@ -150,4 +150,225 @@ def build_and_solve_slave_CCG_RCR(
 
     worst_cost = mdl.ObjVal
     z_star = np.array([z[j].X for j in range(m)])
+    return worst_cost, z_star, mdl
+
+
+
+
+def solve_feasibility_SP_IR(
+    x_star: np.ndarray,
+    P: np.ndarray,
+    D_bar: np.ndarray,
+    D_hat: np.ndarray,
+    Gamma: int,
+    time_limit: int,
+    tolerance: float,
+    log_path: Optional[str] = None,
+    model_name: str = "CCG_SP_IR_Feas",
+) -> Tuple[float, np.ndarray, gp.Model]:
+    """
+    Feasibility adversary SP for INCOMPLETE RECOURSE.
+
+    For a given x̄, we check whether there exists a scenario z ∈ Z(Γ) such that
+    total demand exceeds total capacity:
+
+        total_demand(z) = sum_j (D_bar_j + D_hat_j * z_j)
+        total_cap(x̄)   = sum_i P_i x̄_i
+
+    If max_z [ total_demand(z) - total_cap(x̄) ] > 0, then there exists a
+    scenario with infeasible recourse, and x̄ must be excluded via a no-good cut.
+
+    This SP does NOT use y or KKT; it only works on aggregated capacity.
+    """
+    m = D_bar.shape[0]
+    total_cap = float(np.dot(P, x_star))
+
+    mdl = utils.init_model(
+        name=model_name,
+        time_limit=time_limit,
+        log_path=None if log_path is None else utils.Path(log_path),  # type: ignore
+        mip_gap=tolerance,
+    )
+    mdl.Params.LogToConsole = 0
+    if log_path is not None:
+        mdl.Params.LogFile = log_path
+
+    # z ∈ [-1,1], with budgeted |z| ≤ Gamma
+    z = mdl.addVars(m, lb=-1.0, ub=1.0, vtype=GRB.CONTINUOUS, name="z")
+    s = mdl.addVars(m, lb=0.0, ub=1.0, vtype=GRB.CONTINUOUS, name="s")
+
+    for j in range(m):
+        mdl.addConstr(s[j] >=  z[j],   name=f"s_ge_z_{j}")
+        mdl.addConstr(s[j] >= -z[j],   name=f"s_ge_minusz_{j}")
+    mdl.addConstr(
+        gp.quicksum(s[j] for j in range(m)) <= Gamma,
+        name="budget_Gamma",
+    )
+
+    # total demand under z
+    const_nominal = float(np.sum(D_bar))
+    demand_expr = const_nominal + gp.quicksum(D_hat[j] * z[j] for j in range(m))
+
+    # maximize violation = total_demand(z) - total_cap(x̄)
+    mdl.setObjective(demand_expr - total_cap, GRB.MAXIMIZE)
+    mdl.optimize()
+
+    if mdl.SolCount == 0:
+        raise RuntimeError("IR feasibility subproblem infeasible or no solution found.")
+
+    violation_val = mdl.ObjVal
+    z_star = np.array([z[j].X for j in range(m)])
+
+    return violation_val, z_star, mdl
+
+
+def build_and_solve_slave_CCG_IR(
+    x_star: np.ndarray,
+    c: np.ndarray,
+    P: np.ndarray,
+    D_bar: np.ndarray,
+    D_hat: np.ndarray,
+    d: np.ndarray,
+    Gamma: int,
+    big_M: float,
+    time_limit: int,
+    tolerance: float,
+    log_path: Optional[str] = None,
+    model_name: str = "CCG_Slave_IR",
+) -> Tuple[float, np.ndarray, gp.Model]:
+    """
+    Adversarial value subproblem for INCOMPLETE RECOURSE (IR) with KKT.
+
+    Assuming recourse is feasible for every scenario (we check that FIRST
+    using solve_feasibility_SP_IR), this SP finds the worst-case cost:
+
+        max  cᵀ x̄ + sum_{i,j} d_ij y_ij
+        s.t. KKT system of the recourse LP and z ∈ Z(Γ)
+
+    This is structurally the IR slave problem the user specified, but
+    implemented as a MAXIMIZATION (adversary) instead of a minimization.
+    """
+    n = c.shape[0]
+    m = D_bar.shape[0]
+
+    mdl = utils.init_model(
+        name=model_name,
+        time_limit=time_limit,
+        log_path=None if log_path is None else utils.Path(log_path),  # type: ignore
+        mip_gap=tolerance,
+    )
+    mdl.Params.LogToConsole = 0
+    if log_path is not None:
+        mdl.Params.LogFile = log_path
+
+    M_alpha = utils.compute_M_alpha_IR(d, D_bar, D_hat)          # shape (m,)
+    M_beta  = utils.compute_M_beta_IR(D_bar, D_hat, d, P)                     # shape (n,)
+    M_gamma = utils.compute_M_gamma_IR(d, P, D_bar, D_hat, M_beta)
+    
+    
+    # --- Big-Ms (simple uniform choice; can be tightened if desired) ---
+    M_alpha = np.full(m, big_M)
+    M_beta  = np.full(n, big_M)
+    M_gamma = np.full((n, m), big_M)
+
+    # --- Variables ---
+    # primal y_ij >= 0
+    y = mdl.addVars(n, m, lb=0.0, vtype=GRB.CONTINUOUS, name="y")
+
+    # dual vars α_j, β_i, γ_ij ≥ 0
+    alpha = mdl.addVars(m, lb=0.0, vtype=GRB.CONTINUOUS, name="alpha")
+    beta  = mdl.addVars(n, lb=0.0, vtype=GRB.CONTINUOUS, name="beta")
+    gamma = mdl.addVars(n, m, lb=0.0, vtype=GRB.CONTINUOUS, name="gamma")
+
+    # binaries for complementarity
+    u = mdl.addVars(m, vtype=GRB.BINARY, name="u")      # demand
+    v = mdl.addVars(n, vtype=GRB.BINARY, name="v")      # capacity
+    w = mdl.addVars(n, m, vtype=GRB.BINARY, name="w")   # y vs γ
+
+    # uncertainty z & |z|
+    z = mdl.addVars(m, lb=-1.0, ub=1.0, vtype=GRB.CONTINUOUS, name="z")
+    s = mdl.addVars(m, lb=0.0, vtype=GRB.CONTINUOUS, name="s")
+
+    # --- Constraints ---
+
+    # Stationarity: d_ij - α_j + β_i - γ_ij = 0,  ∀i,j
+    for i in range(n):
+        for j in range(m):
+            mdl.addConstr(
+                d[i, j] - alpha[j] + beta[i] - gamma[i, j] == 0.0,
+                name=f"IR_stationarity_{i}_{j}",
+            )
+
+    # Primal feasibility: demand
+    for j in range(m):
+        mdl.addConstr(
+            gp.quicksum(y[i, j] for i in range(n))
+            >= D_bar[j] + D_hat[j] * z[j],
+            name=f"IR_demand_{j}",
+        )
+
+    # Primal feasibility: capacity
+    for i in range(n):
+        mdl.addConstr(
+            gp.quicksum(y[i, j] for j in range(m))
+            <= P[i] * x_star[i],
+            name=f"IR_capacity_{i}",
+        )
+
+    # Complementarity for α_j and demand slack
+    for j in range(m):
+        mdl.addConstr(alpha[j] <= M_alpha[j] * u[j], name=f"IR_alpha_bigM_{j}")
+        mdl.addConstr(
+            gp.quicksum(y[i, j] for i in range(n))
+            - (D_bar[j] + D_hat[j] * z[j])
+            <= M_alpha[j] * (1 - u[j]),
+            name=f"IR_demand_slack_bigM_{j}",
+        )
+
+    # Complementarity for β_i and capacity slack
+    for i in range(n):
+        mdl.addConstr(beta[i] <= M_beta[i] * v[i], name=f"IR_beta_bigM_{i}")
+        mdl.addConstr(
+            P[i] * x_star[i]
+            - gp.quicksum(y[i, j] for j in range(m))
+            <= M_beta[i] * (1 - v[i]),
+            name=f"IR_capacity_slack_bigM_{i}",
+        )
+
+    # Complementarity for γ_ij and y_ij
+    for i in range(n):
+        for j in range(m):
+            mdl.addConstr(
+                gamma[i, j] <= M_gamma[i, j] * w[i, j],
+                name=f"IR_gamma_bigM_{i}_{j}",
+            )
+            mdl.addConstr(
+                y[i, j] <= M_gamma[i, j] * (1 - w[i, j]),
+                name=f"IR_y_bigM_{i}_{j}",
+            )
+
+    # Budgeted uncertainty: s_j >= |z_j|, sum s_j <= Gamma
+    for j in range(m):
+        mdl.addConstr(s[j] >=  z[j],  name=f"IR_s_ge_z_{j}")
+        mdl.addConstr(s[j] >= -z[j],  name=f"IR_s_ge_minusz_{j}")
+    mdl.addConstr(
+        gp.quicksum(s[j] for j in range(m)) <= Gamma,
+        name="IR_budget_Gamma",
+    )
+
+    # --- Objective: worst-case total cost ---
+    # cost(x̄, z) = ∑_i c_i x̄_i + ∑_{i,j} d_ij y_ij
+    open_cost = gp.quicksum(c[i] * x_star[i] for i in range(n))
+    recourse_cost = gp.quicksum(d[i, j] * y[i, j] for i in range(n) for j in range(m))
+    cost_expr = open_cost + recourse_cost
+
+    mdl.setObjective(cost_expr, GRB.MAXIMIZE)
+    mdl.optimize()
+
+    if mdl.SolCount == 0:
+        raise RuntimeError("IR value subproblem infeasible or no solution found (this should not happen if feasibility SP was satisfied).")
+
+    worst_cost = mdl.ObjVal
+    z_star = np.array([z[j].X for j in range(m)])
+
     return worst_cost, z_star, mdl

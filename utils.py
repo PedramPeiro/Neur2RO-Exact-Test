@@ -46,9 +46,9 @@ def parse_cli() -> argparse.Namespace:
         description="Run FL MIP / robust instance",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--instance", type=str, default="RCR_n4_m12_rep3")
+    parser.add_argument("--instance", type=str, default="IR_n4_m12_rep9")
     parser.add_argument("--time_limit", type=int, default=1200)
-    parser.add_argument("--data_dir", type=str, default="../data/instances_RCR")
+    parser.add_argument("--data_dir", type=str, default="../data/instances_IR")
     parser.add_argument("--tolerance", type=float, default=1e-6)
     parser.add_argument(
         "--Gamma",
@@ -285,7 +285,7 @@ def compute_gap(ub: Optional[float], lb: Optional[float]) -> Optional[float]:
     return (ub - lb) / abs(ub)
 
 
-def compute_M_alpha(
+def compute_M_alpha_RCR(
     pi: np.ndarray,
     D_bar: np.ndarray,
     D_hat: np.ndarray,
@@ -319,7 +319,7 @@ def compute_M_alpha(
     return M_alpha  # shape (m,)
 
 
-def compute_M_beta(
+def compute_M_beta_RCR(
     pi: np.ndarray,
     P: np.ndarray,
     x_star: np.ndarray,
@@ -347,7 +347,7 @@ def compute_M_beta(
     return M_beta  # shape (n,)
 
 
-def compute_M_gamma(
+def compute_M_gamma_RCR(
     M_alpha: np.ndarray,
     M_beta: np.ndarray,
     P: np.ndarray,
@@ -393,3 +393,135 @@ def compute_M_gamma(
             M_gamma[i, j] = max(y_max_ij, gamma_dual_max_ij)
 
     return M_gamma  # shape (n, m)
+
+
+
+import numpy as np
+
+def compute_M_alpha_IR(
+    d: np.ndarray,
+    D_bar: np.ndarray,
+    D_hat: np.ndarray,
+    eps: float = 1e-6,
+) -> np.ndarray:
+    """
+    Compute tight-ish Big-M values M_alpha[j] for IR duals α_j.
+
+    Derivation:
+      - Worst-case total demand D_tot^max = sum_j (D_bar_j + D_hat_j)
+      - Upper bound on recourse cost: UB_rec = d_max * D_tot^max
+      - Minimal demand per customer: D_min_j = max(0, D_bar_j - D_hat_j)
+      - From dual optimality: α_j <= UB_rec / max(D_min_j, eps)
+
+    Parameters
+    ----------
+    d      : (n, m) array of transportation costs d_ij
+    D_bar  : (m,) nominal demands
+    D_hat  : (m,) demand deviations
+    eps    : small positive constant to avoid division by zero
+
+    Returns
+    -------
+    M_alpha : (m,) array with Big-M for each α_j
+    """
+    n, m = d.shape
+    d_max = float(np.max(np.abs(d)))
+
+    D_max = D_bar + D_hat
+    D_tot_max = float(np.sum(D_max))
+
+    UB_rec = d_max * D_tot_max
+
+    D_min = np.maximum(0.0, D_bar - D_hat)
+    denom = np.maximum(D_min, eps)
+
+    M_alpha = UB_rec / denom
+    return M_alpha
+
+
+def compute_M_beta_IR(
+    D_bar: np.ndarray,
+    D_hat: np.ndarray,
+    d: np.ndarray,
+    P: np.ndarray,
+    eps: float = 1e-6,
+) -> np.ndarray:
+    """
+    Compute Big-M values M_beta[i] for IR duals β_i.
+
+    Using:
+      - Same UB_rec as for α (safe upper bound on recourse cost)
+      - Dual optimality implies: β_i * P_i <= UB_rec  (for x_i = 1)
+        hence β_i <= UB_rec / max(P_i, eps)
+
+    Parameters
+    ----------
+    D_bar : (m,) nominal demands
+    D_hat : (m,) demand deviations
+    d     : (n, m) transportation costs
+    P     : (n,) capacities
+    eps   : small positive constant to avoid division by zero
+
+    Returns
+    -------
+    M_beta : (n,) array with Big-M for each β_i
+    """
+    n, m = d.shape
+    d_max = float(np.max(np.abs(d)))
+
+    D_max = D_bar + D_hat
+    D_tot_max = float(np.sum(D_max))
+
+    UB_rec = d_max * D_tot_max
+
+    denom = np.maximum(P, eps)
+    M_beta = UB_rec / denom
+    return M_beta
+
+
+
+def compute_M_gamma_IR(
+    d: np.ndarray,
+    P: np.ndarray,
+    D_bar: np.ndarray,
+    D_hat: np.ndarray,
+    M_beta: np.ndarray,
+) -> np.ndarray:
+    """
+    Compute Big-M values M_gamma[i,j] for γ_ij and y_ij complementarity in IR.
+
+    For each (i,j):
+      - y_ij is bounded by:
+            0 <= y_ij <= Y_max_ij := min(P_i, D_bar_j + D_hat_j)
+      - γ_ij = d_ij - α_j + β_i, with 0 <= α_j <= M_alpha_j, 0 <= β_i <= M_beta_i.
+        Using a safe upper bound γ_ij <= |d_ij| + M_beta_i
+        (M_alpha only tightens this, but using M_beta is already safe if M_beta comes from UB_rec).
+
+      Then set:
+        M_gamma_ij = max(Y_max_ij, |d_ij| + M_beta_i)
+
+    Parameters
+    ----------
+    d      : (n, m) transportation costs
+    P      : (n,) capacities
+    D_bar  : (m,) nominal demands
+    D_hat  : (m,) demand deviations
+    M_beta : (n,) Big-M for β_i
+
+    Returns
+    -------
+    M_gamma : (n, m) array of Big-M values for each (i,j)
+    """
+    n, m = d.shape
+
+    D_max = D_bar + D_hat
+    Y_max = np.zeros((n, m), dtype=float)
+    Gamma_bound = np.zeros((n, m), dtype=float)
+
+    for i in range(n):
+        for j in range(m):
+            Y_max[i, j] = min(P[i], D_max[j])
+            Gamma_bound[i, j] = abs(d[i, j]) + M_beta[i]
+
+    M_gamma = np.maximum(Y_max, Gamma_bound)
+    return M_gamma

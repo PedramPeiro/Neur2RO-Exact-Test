@@ -1,52 +1,3 @@
-"""
-Random instance generator for RCR and IR facility-location models.
-
-RCR model data saved:
-  - fixed opening costs c_i
-  - revenues r_ij
-  - shipping costs d_ij
-  - nominal demands Dbar_j
-  - perturbation factors Dhat_j
-  - capacities P_i
-
-IR model data saved:
-  - fixed opening costs c_i
-  - shipping costs d_ij
-  - nominal demands Dbar_j
-  - perturbation factors Dhat_j
-  - capacities P_i
-
-File format (both models):
-
-  # Instance type: RCR or IR
-  # Format designed for Python-friendly parsing
-  n <n>
-  m <m>
-  <meta_key_1> <value_1>
-  ...
-
-  FACILITIES  # i x y c_i P_i
-  i x_i y_i c_i P_i
-  ...
-
-  CUSTOMERS  # j x y Dbar_j Dhat_j
-  j x_j y_j Dbar_j Dhat_j
-  ...
-
-  D_MATRIX  # d_ij (n rows, m columns)
-  n m
-  d_11 ... d_1m
-  ...
-  d_n1 ... d_nm
-
-  (RCR only)
-  R_MATRIX  # r_ij (n rows, m columns)
-  n m
-  r_11 ... r_1m
-  ...
-  r_n1 ... r_nm
-"""
-
 from pathlib import Path
 import numpy as np
 import math
@@ -59,16 +10,16 @@ sizes = [(5, 10), (5, 15), (10, 15), (10, 20), (20, 40), (4,12)]
 replicas_per_size = 30
 base_seed = 20251112
 
-# Demand / uncertainty (RLTP-style)
-demand_low, demand_high = 0.0, 20000.0
-epsilon_low, epsilon_high = 0.15, 0.4
+# Demand / uncertainty
+demand_low, demand_high = 10.0, 30.0
+epsilon_low, epsilon_high = 0.15, 0.5
 
 # Revenue (RCR)
-nu_low, nu_high = 1.4, 1.8  # scalar price shared across arcs
+nu_low, nu_high = 0.8, 1.0   # scalar price shared across arcs
 
 # Opening costs and capacities
-open_cost_low, open_cost_high = 15000.0, 30000.0
-capacity_low, capacity_high = 0.0, 50000.0
+open_cost_low, open_cost_high = 5.0, 15.0
+capacity_low, capacity_high = 20.0, 150.0
 
 # IR feasibility scaling
 rho_IR = 1.05
@@ -212,7 +163,17 @@ def generate_RCR_instance(n, m, seed):
     # 5) Opening costs and capacities
     c_open = rng.uniform(open_cost_low, open_cost_high, size=n)
     P_prime = rng.uniform(capacity_low, capacity_high, size=n)
-    P = P_prime.copy()
+    total_Dbar = float(Dbar.sum())
+    total_P_prime = float(P_prime.sum())
+
+    if total_P_prime > 0:
+        # Use a mild headroom factor, e.g. ρ_RCR = 1.2
+        rho_RCR = 1.2
+        s = (rho_RCR * total_Dbar) / total_P_prime
+    else:
+        s = 1.0
+
+    P = s * P_prime
 
     # Facilities and customers
     facilities = []

@@ -46,7 +46,7 @@ def parse_cli() -> argparse.Namespace:
         description="Run FL MIP / robust instance",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--instance", type=str, default="RCR_n4_m12_rep0")
+    parser.add_argument("--instance", type=str, default="RCR_n4_m12_rep3")
     parser.add_argument("--time_limit", type=int, default=1200)
     parser.add_argument("--data_dir", type=str, default="../data/instances_RCR")
     parser.add_argument("--tolerance", type=float, default=1e-6)
@@ -274,3 +274,122 @@ def vertex_generation(dim: int, Gamma: int, max_vertices: int = 2_000_000) -> tu
     Zs = np.stack(vertices, axis=1)  # shape: (dim, N_vertices)
     N_vertices = Zs.shape[1]
     return Zs, N_vertices
+
+
+def compute_gap(ub: Optional[float], lb: Optional[float]) -> Optional[float]:
+    """Return (ub-lb)/ub if numbers are valid else *None*."""
+    if ub is None or lb is None:
+        return None
+    if math.isinf(ub):
+        return float('inf')  # Clearly indicates unbounded gap
+    return (ub - lb) / abs(ub)
+
+
+def compute_M_alpha(
+    pi: np.ndarray,
+    D_bar: np.ndarray,
+    D_hat: np.ndarray,
+    Gamma: int,
+) -> np.ndarray:
+    """
+    Compute M^alpha_j for each customer j, used in:
+
+        alpha_j <= M^alpha_j * u_j
+        D_bar_j + D_hat_j * z_j - sum_i y_ij <= M^alpha_j * (1 - u_j)
+
+    Derivation:
+      - alpha_j <= max_i pi_ij    (dual-side)
+      - demand slack <= max_z (D_bar_j + D_hat_j z_j) = D_bar_j + D_hat_j * min(1, Gamma)
+    """
+    n, m = pi.shape
+    assert m == D_bar.shape[0] == D_hat.shape[0]
+
+    # Dual-based upper bound: max_i pi_ij
+    A_dual = pi.max(axis=0)  # shape (m,)
+
+    # Max possible RHS of demand constraint per j
+    if Gamma <= 0:
+        z_j_max = 0.0
+    else:
+        z_j_max = 1.0  # since Gamma is int >=1 → can spend 1 unit on customer j
+
+    A_slack = D_bar + D_hat * z_j_max  # shape (m,)
+
+    M_alpha = np.maximum(A_dual, A_slack)
+    return M_alpha  # shape (m,)
+
+
+def compute_M_beta(
+    pi: np.ndarray,
+    P: np.ndarray,
+    x_star: np.ndarray,
+) -> np.ndarray:
+    """
+    Compute M^beta_i for each facility i, used in:
+
+        beta_i <= M^beta_i * v_i
+        P_i x_star_i - sum_j y_ij <= M^beta_i * (1 - v_i)
+
+    Derivation:
+      - beta_i <= max_j pi_ij      (dual-side)
+      - capacity slack <= P_i x_star_i.
+    """
+    n, m = pi.shape
+    assert n == P.shape[0] == x_star.shape[0]
+
+    # Dual-based upper bound: max_j pi_ij
+    B_dual = pi.max(axis=1)  # shape (n,)
+
+    # Max capacity slack per i for current x_star
+    B_slack = P * x_star  # shape (n,)
+
+    M_beta = np.maximum(B_dual, B_slack)
+    return M_beta  # shape (n,)
+
+
+def compute_M_gamma(
+    M_alpha: np.ndarray,
+    M_beta: np.ndarray,
+    P: np.ndarray,
+    D_bar: np.ndarray,
+    D_hat: np.ndarray,
+    x_star: np.ndarray,
+    Gamma: int,
+) -> np.ndarray:
+    """
+    Compute M^gamma_{ij} for each (i,j), used in:
+
+        gamma_ij <= M^gamma_ij * w_ij
+        y_ij     <= M^gamma_ij * (1 - w_ij)
+
+    Derivation:
+      - y_ij <= min( D_j^max, P_i x_star_i )
+        with D_j^max = D_bar_j + D_hat_j * min(1, Gamma)
+      - gamma_ij = alpha_j + beta_i - pi_ij
+        ⇒ gamma_ij <= M_alpha_j + M_beta_i (since pi_ij >= 0).
+      - So M^gamma_ij = max( y_max_ij, M_alpha_j + M_beta_i ).
+    """
+    n = P.shape[0]
+    m = D_bar.shape[0]
+    assert M_alpha.shape[0] == m
+    assert M_beta.shape[0] == n
+    assert x_star.shape[0] == n
+    assert D_hat.shape[0] == m
+
+    if Gamma <= 0:
+        z_j_max = 0.0
+    else:
+        z_j_max = 1.0
+
+    D_max = D_bar + D_hat * z_j_max  # shape (m,)
+
+    M_gamma = np.zeros((n, m), dtype=float)
+
+    for i in range(n):
+        cap_i = P[i] * x_star[i]
+        for j in range(m):
+            y_max_ij = min(D_max[j], cap_i)
+            gamma_dual_max_ij = M_alpha[j] + M_beta[i]
+            M_gamma[i, j] = max(y_max_ij, gamma_dual_max_ij)
+
+    return M_gamma  # shape (n, m)

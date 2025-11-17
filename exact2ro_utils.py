@@ -577,7 +577,6 @@ def add_constraints_exact2ro_IR(
         ),
         name="final_IR_eval_selected_capacity",
     )
-    # y^* >= 0 and x binary are enforced by var types
 
     # ---------------------------------------------------------------
     # Argmax selectors for z^O* and z^F*
@@ -656,7 +655,6 @@ def add_constraints_exact2ro_IR(
         ),
         name="final_IR_feas_LHS_capacity",
     )
-    # Nonnegativity of Y_F, U, V already via variable bounds
 
     # Dual side (orange) (final_IR_feas_RHS_t)
     # t^F <= sum_i c_i x_i
@@ -707,7 +705,6 @@ def add_constraints_exact2ro_IR(
         name="final_IR_mcc_gamma_low",
     )
 
-    # Nonnegativity and bounds for gamma, beta, alpha already in variable defs
 
     # Dual feasibility (final_IR_feas_RHS_dualfeas)
     # alpha_j^{(k)} - beta_i^{(k)} <= d_ij
@@ -761,7 +758,6 @@ def add_constraints_exact2ro_IR(
         ),
         name="final_IR_opt_LHS_capacity",
     )
-    # y^O nonneg via bounds
 
     # Dual side (final_IR_opt_RHS_t)
     # t^O <= sum_i c_i x_i
@@ -808,7 +804,6 @@ def add_constraints_exact2ro_IR(
         ),
         name="final_IR_mcc_kappa_low",
     )
-    # Nonnegativity of Kappa, Lambda, Pi via variable defs
 
     # Dual feasibility (final_IR_opt_RHS_dualfeas)
     # lambda_j^{(k)} - pi_i^{(k)} <= d_ij

@@ -12,7 +12,7 @@ import numpy as np
 from collections import defaultdict
 import dataread
 import itertools
-
+from gurobipy import GRB
 
 
 _STATUS_MAP = {
@@ -46,14 +46,14 @@ def parse_cli() -> argparse.Namespace:
         description="Run FL MIP / robust instance",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--instance", type=str, default="IR_n4_m12_rep9")
-    parser.add_argument("--time_limit", type=int, default=1200)
-    parser.add_argument("--data_dir", type=str, default="../data/instances_IR")
+    parser.add_argument("--instance", type=str, default="RCR_n4_m12_rep9")
+    parser.add_argument("--time_limit", type=int, default=3600)
+    parser.add_argument("--data_dir", type=str, default="../data/instances_RCR")
     parser.add_argument("--tolerance", type=float, default=1e-6)
     parser.add_argument(
         "--Gamma",
         type=int,
-        default=4,
+        default=1,
         help=(
             "Budget of uncertainty for robust models (integer in [0, m]). "
             "Deterministic models simply ignore this argument."
@@ -525,3 +525,73 @@ def compute_M_gamma_IR(
 
     M_gamma = np.maximum(Y_max, Gamma_bound)
     return M_gamma
+
+
+def write_debug_summary_Exact2RO_RCR(
+    mdl: gp.Model,
+    txt_log,
+    X,
+    Y_star,
+    Z_star,
+    mu,
+    t,
+    N: List[int],
+    M: List[int],
+    opening_cost,
+    ship_cost,
+    revenue,
+    tol: float = 1e-6,
+):
+    """
+    Append a human-readable debug summary to txt_log:
+
+    - optimal x vector
+    - optimal z_star vector
+    - t*
+    - Q(x, z_star) based on Y_star
+    - comparison: t vs Q(x,z_star), mu vs t
+    """
+    if mdl.Status not in (GRB.OPTIMAL, GRB.SUBOPTIMAL):
+        with open(txt_log, "a", encoding="utf-8") as f:
+            f.write("\n=== Debug summary skipped (model not optimal/suboptimal) ===\n")
+        return
+
+    # Extract values
+    x_vec = [float(X[i].X) for i in N]
+    z_vec = [float(Z_star[j].X) for j in M]
+    t_val = float(t.X)
+    mu_val = float(mu.X)
+
+    # Compute Q(x, z_star) from Y_star
+    Q_xz = 0.0
+    # first-stage cost
+    for i in N:
+        Q_xz += opening_cost[i] * x_vec[i]
+    # minus recourse profit term
+    for i in N:
+        for j in M:
+            margin = revenue[i][j] - ship_cost[i][j]
+            Q_xz -= margin * float(Y_star[i, j].X)
+
+    diff_t_Q = abs(t_val - Q_xz)
+    diff_mu_t = abs(mu_val - t_val)
+
+    equal_t_Q = diff_t_Q <= tol
+    equal_mu_t = diff_mu_t <= tol
+
+    with open(txt_log, "a", encoding="utf-8") as f:
+        f.write("\n\n=== Exact2RO Debug Summary ===\n")
+        f.write(f"Status code: {mdl.Status}\n")
+        f.write(f"Objective (mu)   = {mu_val:.6f}\n")
+        f.write(f"t (worst-case)   = {t_val:.6f}\n")
+        f.write(f"Q(x, z_star)     = {Q_xz:.6f}\n")
+        f.write(f"|t - Q(x,z_star)| = {diff_t_Q:.3e}  -> equal? {equal_t_Q}\n")
+        f.write(f"|mu - t|          = {diff_mu_t:.3e}  -> equal? {equal_mu_t}\n")
+
+        f.write("\nOptimal x:\n")
+        f.write("  x* = [" + ", ".join(f"{val:.6f}" for val in x_vec) + "]\n")
+
+        f.write("\nOptimal z_star:\n")
+        f.write("  z_star* = [" + ", ".join(f"{val:.6f}" for val in z_vec) + "]\n")
+
+        f.write("\n(End of Exact2RO Debug Summary)\n")

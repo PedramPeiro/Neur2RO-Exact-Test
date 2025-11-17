@@ -595,3 +595,89 @@ def write_debug_summary_Exact2RO_RCR(
         f.write("  z_star* = [" + ", ".join(f"{val:.6f}" for val in z_vec) + "]\n")
 
         f.write("\n(End of Exact2RO Debug Summary)\n")
+
+
+def write_debug_summary_Exact2RO_IR(
+    mdl,
+    txt_log,
+    X,
+    Y_star,
+    V_star,
+    Z_O_star,
+    Z_F_star,
+    eta,
+    t_O,
+    t_F,
+    Delta_O,
+    Delta_F,
+    N,
+    M,
+    K,
+):
+    """
+    Append a debug summary for Exact2RO-IR to txt_log.
+
+    Logs:
+      - model status and objective
+      - x* vector
+      - Delta_O, Delta_F and chosen vertices k_O, k_F
+      - z_O_star and z_F_star
+      - t_O*, t_F*, eta* and consistency checks:
+            eta >= t_O, eta >= t_F and eta - max(t_O, t_F)
+    """
+    with open(txt_log, "a", encoding="utf-8") as f:
+        f.write("\n\n=== Debug summary (Exact2RO-IR) ===\n")
+
+        # Status and objective
+        try:
+            obj_val = mdl.ObjVal
+        except Exception:
+            obj_val = None
+
+        f.write(f"Model status: {mdl.Status}\n")
+        f.write(f"Objective (eta*): {obj_val}\n")
+
+        # x* vector
+        x_vals = [X[i].X for i in N]
+        f.write("x* = [" + ", ".join(f"{v:.4f}" for v in x_vals) + "]\n")
+
+        # Delta_O, Delta_F and chosen vertices
+        f.write("Delta_O* (per k): " +
+                ", ".join(f"{k}:{Delta_O[k].X:.3f}" for k in K) + "\n")
+        f.write("Delta_F* (per k): " +
+                ", ".join(f"{k}:{Delta_F[k].X:.3f}" for k in K) + "\n")
+
+        # Pick the argmax indices (ties broken arbitrarily by max)
+        k_O = max(K, key=lambda kk: Delta_O[kk].X)
+        k_F = max(K, key=lambda kk: Delta_F[kk].X)
+        f.write(f"Chosen k_O = {k_O}\n")
+        f.write(f"Chosen k_F = {k_F}\n")
+
+        # z_O_star and z_F_star
+        zO_vals = [Z_O_star[j].X for j in M]
+        zF_vals = [Z_F_star[j].X for j in M]
+        f.write("z_O_star = [" + ", ".join(f"{v:.3f}" for v in zO_vals) + "]\n")
+        f.write("z_F_star = [" + ", ".join(f"{v:.3f}" for v in zF_vals) + "]\n")
+
+        # t_O, t_F, eta
+        tO_val = t_O.X
+        tF_val = t_F.X
+        eta_val = eta.X
+        f.write(f"t_O* = {tO_val:.6f}\n")
+        f.write(f"t_F* = {tF_val:.6f}\n")
+        f.write(f"eta* = {eta_val:.6f}\n")
+
+        max_t = max(tO_val, tF_val)
+        f.write(f"max(t_O*, t_F*) = {max_t:.6f}\n")
+        f.write(f"eta* - max(t_O*, t_F*) = {eta_val - max_t:.6e}\n")
+
+        eps = 1e-6
+        cond_O = eta_val >= tO_val - eps
+        cond_F = eta_val >= tF_val - eps
+        f.write(f"[CHECK] eta >= t_O? {cond_O}\n")
+        f.write(f"[CHECK] eta >= t_F? {cond_F}\n")
+
+        # Optional: quick view of V_star (capacity slack in selected scenario)
+        v_star_vals = [V_star[i].X for i in N]
+        f.write("V_star (capacity slack for selected scenario) = [" +
+                ", ".join(f"{v:.4f}" for v in v_star_vals) + "]\n")

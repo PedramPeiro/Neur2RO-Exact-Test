@@ -43,7 +43,6 @@ def main() -> None:
     d = np.array(param["d"])
 
     Gamma = args.Gamma
-    big_M = 200.0  # can be tuned / replaced by tighter M's
 
     # Initial scenario list for optimality cuts: nominal z = 0
     scenario_list: List[np.ndarray] = [np.zeros(m)]
@@ -114,6 +113,9 @@ def main() -> None:
             with txt_log.open("a", encoding="utf-8") as fh:
                 fh.write(f"Iter {iteration}\n")
                 fh.write("  Recourse infeasible for some scenario z ∈ Z(Gamma).\n")
+                fh.write("  Scenario causing infeasibility z_infeas: [")
+                fh.write(", ".join(f"{zi:.3f}" for zi in z_infeas))
+                fh.write("]\n")
                 fh.write(f"  Feasibility violation = {violation_val:.6f}\n")
                 fh.write("  Adding no-good cut to exclude current x*.\n")
                 fh.write("  x*: [")
@@ -135,7 +137,6 @@ def main() -> None:
             D_hat=D_hat,
             d=d,
             Gamma=Gamma,
-            big_M=big_M,
             time_limit=args.time_limit,
             tolerance=args.tolerance,
             log_path=str(slave_log_path),

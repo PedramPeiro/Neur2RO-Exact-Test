@@ -46,9 +46,9 @@ def parse_cli() -> argparse.Namespace:
         description="Run FL MIP / robust instance",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--instance", type=str, default="RCR_n4_m12_rep9")
+    parser.add_argument("--instance", type=str, default="IR_n4_m12_rep29")
     parser.add_argument("--time_limit", type=int, default=3600)
-    parser.add_argument("--data_dir", type=str, default="../data/instances_RCR")
+    parser.add_argument("--data_dir", type=str, default="../data/instances_IR")
     parser.add_argument("--tolerance", type=float, default=1e-6)
     parser.add_argument(
         "--Gamma",
@@ -602,7 +602,6 @@ def write_debug_summary_Exact2RO_IR(
     txt_log,
     X,
     Y_star,
-    V_star,
     Z_O_star,
     Z_F_star,
     eta,
@@ -678,6 +677,6 @@ def write_debug_summary_Exact2RO_IR(
         f.write(f"[CHECK] eta >= t_F? {cond_F}\n")
 
         # Optional: quick view of V_star (capacity slack in selected scenario)
-        v_star_vals = [V_star[i].X for i in N]
-        f.write("V_star (capacity slack for selected scenario) = [" +
-                ", ".join(f"{v:.4f}" for v in v_star_vals) + "]\n")
+        # v_star_vals = [V_star[i].X for i in N]
+        # f.write("V_star (capacity slack for selected scenario) = [" +
+        #         ", ".join(f"{v:.4f}" for v in v_star_vals) + "]\n")

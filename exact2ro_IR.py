@@ -73,7 +73,6 @@ def main() -> None:
     (
         X,
         Y_star,
-        V_star,
         eta,
         t_O,
         t_F,
@@ -97,7 +96,6 @@ def main() -> None:
         mdl,
         X,
         Y_star,
-        V_star,
         eta,
         t_O,
         t_F,
@@ -202,7 +200,6 @@ def main() -> None:
         txt_log,
         X,
         Y_star,
-        V_star,
         Z_O_star,
         Z_F_star,
         eta,

@@ -449,7 +449,6 @@ def add_variables_exact2ro_IR(
 
     # Selected scenario recourse and capacity slack
     Y_star = mdl.addVars(N, M, lb=0.0, vtype=GRB.CONTINUOUS, name="Y_star")
-    V_star = mdl.addVars(N, lb=0.0, vtype=GRB.CONTINUOUS, name="V_star")
 
     # Global objective and block values
     eta = mdl.addVar(lb=-GRB.INFINITY, vtype=GRB.CONTINUOUS, name="eta")
@@ -486,11 +485,11 @@ def add_variables_exact2ro_IR(
     Pi = mdl.addVars(K, N, lb=0.0, vtype=GRB.CONTINUOUS, name="Pi")
     Kappa = mdl.addVars(K, N, lb=0.0, vtype=GRB.CONTINUOUS, name="Kappa")
 
-    return X, Y_star, V_star, eta, t_O, t_F, Delta_O, Delta_F, Z_O_star, Z_F_star, Y_F, U, V, Alpha, Beta, Gamma, Y_O, Lambda, Pi, Kappa
+    return X, Y_star, eta, t_O, t_F, Delta_O, Delta_F, Z_O_star, Z_F_star, Y_F, U, V, Alpha, Beta, Gamma, Y_O, Lambda, Pi, Kappa
 
 
 def add_constraints_exact2ro_IR(
-    mdl: gp.Model, X, Y_star, V_star, eta, t_O, t_F, Delta_O, Delta_F, Z_O_star, Z_F_star, Y_F, U, V,
+    mdl: gp.Model, X, Y_star, eta, t_O, t_F, Delta_O, Delta_F, Z_O_star, Z_F_star, Y_F, U, V,
     Alpha,
     Beta,
     Gamma,
@@ -572,7 +571,7 @@ def add_constraints_exact2ro_IR(
     mdl.addConstrs(
         (
             gp.quicksum(Y_star[i, j] for j in M)
-            <= capacity[i] * X[i] + V_star[i]
+            <= capacity[i] * X[i]
             for i in N
         ),
         name="final_IR_eval_selected_capacity",

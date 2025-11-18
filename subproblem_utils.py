@@ -230,7 +230,6 @@ def build_and_solve_slave_CCG_IR(
     D_hat: np.ndarray,
     d: np.ndarray,
     Gamma: int,
-    big_M: float,
     time_limit: int,
     tolerance: float,
     log_path: Optional[str] = None,
@@ -265,12 +264,6 @@ def build_and_solve_slave_CCG_IR(
     M_beta  = utils.compute_M_beta_IR(D_bar, D_hat, d, P)                     # shape (n,)
     M_gamma = utils.compute_M_gamma_IR(d, P, D_bar, D_hat, M_beta)
     
-    
-    # --- Big-Ms (simple uniform choice; can be tightened if desired) ---
-    M_alpha = np.full(m, big_M)
-    M_beta  = np.full(n, big_M)
-    M_gamma = np.full((n, m), big_M)
-
     # --- Variables ---
     # primal y_ij >= 0
     y = mdl.addVars(n, m, lb=0.0, vtype=GRB.CONTINUOUS, name="y")

@@ -45,10 +45,11 @@ def main() -> None:
     pi = r - d
 
     Gamma = args.Gamma
-    big_M = 200  # can be tuned
 
     # Initial scenario: nominal z = 0
     scenario_list: List[np.ndarray] = [np.zeros(m)]
+    # Track how many times each scenario has been returned as worst-case
+    repeat_counts: List[int] = [0]
 
     # Global bounds
     LB = -float("inf")
@@ -110,7 +111,7 @@ def main() -> None:
 
         gap = (UB - LB) / abs(UB) if abs(UB) > 1e-12 else float("inf")
 
-        # ----- Logging -----
+        # ----- Logging for this iteration -----
         with txt_log.open("a", encoding="utf-8") as fh:
             fh.write(f"Iter {iteration}\n")
             fh.write(
@@ -128,7 +129,7 @@ def main() -> None:
             fh.write(", ".join(f"{zj:.3f}" for zj in z_worst))
             fh.write("]\n\n")
 
-        # ----- Stopping rule -----
+        # ----- Stopping rule based on gap -----
         if gap <= args.tolerance:
             with txt_log.open("a", encoding="utf-8") as fh:
                 fh.write(
@@ -137,26 +138,39 @@ def main() -> None:
                 )
             break
 
-        # ----- Scenario update -----
-        is_new = True
-        for z_prev in scenario_list:
+        # ----- Scenario update + repetition counting -----
+        match_idx = None
+        for idx, z_prev in enumerate(scenario_list):
             if np.allclose(z_worst, z_prev, atol=1e-6):
-                is_new = False
+                match_idx = idx
                 break
 
-        if is_new:
+        if match_idx is None:
+            # New critical scenario
             scenario_list.append(z_worst)
+            repeat_counts.append(0)
         else:
+            # Existing scenario repeated
+            repeat_counts[match_idx] += 1
             with txt_log.open("a", encoding="utf-8") as fh:
                 fh.write(
-                    "Adversary returned an existing scenario; "
-                    "no new scenario added this iteration.\n"
+                    f"Adversary returned existing scenario index {match_idx}; "
+                    f"repeat count = {repeat_counts[match_idx]}.\n"
                 )
-            # optional safety condition:
-            if iteration > 1 and gap <= 10 * args.tolerance:
-                fh.write("Repeated scenario and small gap → stopping.\n")
+
+            # If repeated 5 times, push LB to UB and stop
+            if repeat_counts[match_idx] >= 5:
+                LB = UB  # push LB to the value created by this critical scenario
+                gap = 0.0
+                with txt_log.open("a", encoding="utf-8") as fh:
+                    fh.write(
+                        f"Scenario index {match_idx} repeated 5 times. "
+                        f"Forcing LB_global = UB_global = {UB:.6f} and "
+                        f"terminating CCG.\n"
+                    )
                 break
 
+        # Optional hard iteration cap
         if iteration >= 1000:
             with txt_log.open("a", encoding="utf-8") as fh:
                 fh.write("Maximum number of iterations reached → stopping.\n")

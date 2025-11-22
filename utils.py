@@ -7,7 +7,6 @@ import re
 import math
 import pandas as pd
 import gurobipy as gp
-import cvxpy as cp
 import numpy as np
 from collections import defaultdict
 import dataread
@@ -46,14 +45,14 @@ def parse_cli() -> argparse.Namespace:
         description="Run FL MIP / robust instance",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    parser.add_argument("--instance", type=str, default="IR_n4_m12_rep8")
+    parser.add_argument("--instance", type=str, default="IR_n4_m12_rep1")
     parser.add_argument("--time_limit", type=int, default=3600)
     parser.add_argument("--data_dir", type=str, default="../data/instances_IR")
     parser.add_argument("--tolerance", type=float, default=1e-6)
     parser.add_argument(
         "--Gamma",
         type=int,
-        default=2,
+        default=1,
         help=(
             "Budget of uncertainty for robust models (integer in [0, m]). "
             "Deterministic models simply ignore this argument."
@@ -399,10 +398,10 @@ def write_debug_summary_Exact2RO_IR(
         f.write("x* = [" + ", ".join(f"{v:.4f}" for v in x_vals) + "]\n")
 
         # Delta_O, Delta_F and chosen vertices
-        f.write("Delta_O* (per k): " +
-                ", ".join(f"{k}:{Delta_O[k].X:.3f}" for k in K) + "\n")
-        f.write("Delta_F* (per k): " +
-                ", ".join(f"{k}:{Delta_F[k].X:.3f}" for k in K) + "\n")
+        # f.write("Delta_O* (per k): " +
+        #         ", ".join(f"{k}:{Delta_O[k].X:.3f}" for k in K) + "\n")
+        # f.write("Delta_F* (per k): " +
+        #         ", ".join(f"{k}:{Delta_F[k].X:.3f}" for k in K) + "\n")
 
         # Pick the argmax indices (ties broken arbitrarily by max)
         k_O = max(K, key=lambda kk: Delta_O[kk].X)

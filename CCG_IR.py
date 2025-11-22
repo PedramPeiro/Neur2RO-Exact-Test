@@ -46,6 +46,8 @@ def main() -> None:
 
     # Initial scenario list for optimality cuts: nominal z = 0
     scenario_list: List[np.ndarray] = [np.zeros(m)]
+    # Count how many times each scenario has been returned as z_worst
+    scenario_counts: List[int] = [0]   # parallel to scenario_list
 
     # List of x̄ that have been ruled out by feasibility (no-good cuts)
     forbidden_x: List[np.ndarray] = []
@@ -165,7 +167,7 @@ def main() -> None:
             fh.write(", ".join(f"{zj:.3f}" for zj in z_worst))
             fh.write("]\n\n")
 
-        # ----- Stopping rule -----
+        # ----- Stopping rule based on standard gap -----
         if gap <= args.tolerance:
             with txt_log.open("a", encoding="utf-8") as fh:
                 fh.write(
@@ -176,23 +178,41 @@ def main() -> None:
 
         # ----- Scenario update (for optimality cuts only) -----
         is_new = True
-        for z_prev in scenario_list:
+        matched_idx = -1
+        for k, z_prev in enumerate(scenario_list):
             if np.allclose(z_worst, z_prev, atol=1e-6):
                 is_new = False
+                matched_idx = k
                 break
 
         if is_new:
             scenario_list.append(z_worst)
+            scenario_counts.append(1)  # first time this scenario appears as worst
         else:
+            # Existing scenario: increase its "worst-case hit" count
+            scenario_counts[matched_idx] += 1
+            count_k = scenario_counts[matched_idx]
             with txt_log.open("a", encoding="utf-8") as fh:
                 fh.write(
-                    "Adversary returned an existing scenario; "
-                    "no new scenario added this iteration.\n"
+                    f"Adversary returned an existing scenario (index {matched_idx}); "
+                    f"this scenario has been worst-case {count_k} times so far.\n"
                 )
-            if iteration > 1 and gap <= 10 * args.tolerance:
-                fh.write("Repeated scenario and small gap → stopping.\n")
+
+            # If a given scenario has been worst-case 5 times, push LB up to its value
+            if count_k >= 5:
+                # push LB to the value that this critical scenario is creating
+                LB = max(LB, UB_iter)
+                gap = (UB - LB) / abs(UB) if abs(UB) > 1e-12 else float("inf")
+                with txt_log.open("a", encoding="utf-8") as fh:
+                    fh.write(
+                        f"Scenario {matched_idx} has been worst-case 5 times.\n"
+                        f"Pushing LB to UB_iter = {UB_iter:.6f}.\n"
+                        f"New LB_global = {LB:.6f}, gap = {gap:.6e}.\n"
+                        "Stopping CCG_IR loop based on repeated critical scenario.\n"
+                    )
                 break
 
+        # Safety stop on iteration count
         if iteration >= 1000:
             with txt_log.open("a", encoding="utf-8") as fh:
                 fh.write("Maximum number of iterations reached → stopping.\n")

@@ -613,18 +613,12 @@ def add_constraints_exact2ro_IR(
     # ---------------------------------------------------------------
 
     # (final_IR_feas_LHS_t)
-    # t^F >= sum_i c_i x_i
-    #      + sum_{i,j} d_ij y^{F,(k)}_ij
-    #      + rho_D sum_j u_j^{(k)}
+    # t^F >= rho_D sum_j u_j^{(k)}
     #      + rho_P sum_i v_i^{(k)}    for all k
     mdl.addConstrs(
         (
             t_F
-            >= first_stage_cost()
-            + gp.quicksum(
-                ship_cost[i][j] * Y_F[k, i, j] for i in N for j in M
-            )
-            + rho_D * gp.quicksum(U[k, j] for j in M)
+            >= rho_D * gp.quicksum(U[k, j] for j in M)
             + rho_P * gp.quicksum(V[k, i] for i in N)
             for k in K
         ),
@@ -663,8 +657,7 @@ def add_constraints_exact2ro_IR(
     mdl.addConstrs(
         (
             t_F
-            <= first_stage_cost()
-            + gp.quicksum(
+            <= gp.quicksum(
                 (D_bar[j] + D_hat[j] * z_vertices[j, k]) * Alpha[k, j]
                 for j in M
             )
@@ -706,10 +699,10 @@ def add_constraints_exact2ro_IR(
 
 
     # Dual feasibility (final_IR_feas_RHS_dualfeas)
-    # alpha_j^{(k)} - beta_i^{(k)} <= d_ij
+    # alpha_j^{(k)} <= beta_i^{(k)}
     mdl.addConstrs(
         (
-            Alpha[k, j] - Beta[k, i] <= ship_cost[i][j]
+            Alpha[k, j] <= Beta[k, i]
             for k in K
             for i in N
             for j in M

@@ -45,8 +45,8 @@ def main() -> None:
     ship_cost = param["d"]
 
     # Penalty parameters (allow both rho_D / rhoD naming)
-    rho_D = param.get("rho_D", param.get("rhoD", 1e5))
-    rho_P = param.get("rho_P", param.get("rhoP", 1e5))
+    rho_D = param.get("rho_D", param.get("rhoD", 100))
+    rho_P = param.get("rho_P", param.get("rhoP", 100))
     if rho_D is None or rho_P is None:
         raise ValueError(
             "IR instances must provide rho_D (or rhoD) and rho_P (or rhoP)."
@@ -181,7 +181,7 @@ def main() -> None:
         with open(txt_log, "a", encoding="utf-8") as f:
             f.write("\n\n=== IR feasibility check (CCG SP) ===\n")
             f.write(f"x_star = [{', '.join(f'{v:.4f}' for v in x_star)}]\n")
-            f.write(f"violation = {feas_violation:.6e}\n")
+            f.write(f"violation = {feas_violation:.4f}, (negative means feasible)\n")
             f.write(
                 "conclusion = FEASIBLE_BY_SP\n"
                 if is_feasible

@@ -5,6 +5,7 @@ from typing import Optional, Tuple
 import numpy as np
 import gurobipy as gp
 from gurobipy import GRB
+from bigM_utils import *
 
 import utils
 
@@ -35,9 +36,9 @@ def build_and_solve_slave_CCG_RCR(
     n = c.shape[0]
     m = D_bar.shape[0]
     
-    M_alpha = utils.compute_M_alpha_RCR(pi, D_bar, D_hat, Gamma)          # shape (m,)
-    M_beta  = utils.compute_M_beta_RCR(pi, P, x_star)                     # shape (n,)
-    M_gamma = utils.compute_M_gamma_RCR(M_alpha, M_beta, P, D_bar, D_hat, # shape (n,m)
+    M_alpha = compute_M_alpha_RCR(pi, D_bar, D_hat, Gamma)          # shape (m,)
+    M_beta  = compute_M_beta_RCR(pi, P, x_star)                     # shape (n,)
+    M_gamma = compute_M_gamma_RCR(M_alpha, M_beta, P, D_bar, D_hat, # shape (n,m)
                               x_star, Gamma)
 
     mdl = utils.init_model(
@@ -260,9 +261,14 @@ def build_and_solve_slave_CCG_IR(
     if log_path is not None:
         mdl.Params.LogFile = log_path
 
-    M_alpha = utils.compute_M_alpha_IR(d, D_bar, D_hat)          # shape (m,)
-    M_beta  = utils.compute_M_beta_IR(D_bar, D_hat, d, P)                     # shape (n,)
-    M_gamma = utils.compute_M_gamma_IR(d, P, D_bar, D_hat, M_beta)
+    M_alpha = compute_M_alpha_IR(d, D_bar, D_hat, P)          # shape (m,)
+    M_beta  = compute_M_beta_IR(d, P, x_star)                     # shape (n,)
+    M_gamma = compute_M_gamma_IR(d, P, D_bar, D_hat, x_star, M_beta)
+    
+    # M_alpha = 200*np.ones(m)          # shape (m,)
+    # M_beta  = 200*np.ones(n)                     # shape (n,)
+    # M_gamma = 200*np.ones((n, m))
+    
     
     # --- Variables ---
     # primal y_ij >= 0

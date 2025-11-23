@@ -1,9 +1,9 @@
 #!/bin/bash
 #SBATCH --account=def-daryalal
 #SBATCH --nodes=1
-#SBATCH --ntasks-per-node=15
+#SBATCH --ntasks-per-node=10
 #SBATCH --cpus-per-task=1
-#SBATCH --time=2:00:00
+#SBATCH --time=6:00:00
 #SBATCH --job-name=Exact2RO_IR_n5m10
 #SBATCH --output=Exact2RO_IR_n5m10_%j.out
 #SBATCH --mail-type=END,FAIL
@@ -48,7 +48,7 @@ echo "[$(date +%T)] start ${instance} (Gamma=${Gamma}) on $(hostname)"
 
 "$HOME/.venvs/exact2ro/bin/python" -u exact2ro_IR.py \
   --instance "${instance}" \
-  --time_limit 1800 \
+  --time_limit 7200 \
   --data_dir "data/instances_IR" \
   --tolerance 1e-6 \
   --Gamma "${Gamma}" \

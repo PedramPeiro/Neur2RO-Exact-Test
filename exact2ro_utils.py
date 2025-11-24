@@ -327,61 +327,37 @@ def compute_big_M_constants_exact2ro_IR(
     rho_P: float,
 ):
     """
-    Compute Big-M constants for the IR Exact2RO MILP.
+    Compute Big-M constants for the IR Exact2RO MILP, consistent with the
+    final formulation where:
 
-    We need:
-      - M_opt : used in the optimality block t^O upper bounds
-      - M_feas: used in the feasibility block t^F upper bounds
-      - M_pi  : used in the McCormick linearization of kappa / pi / x
-                in the optimality block.
+      - t^O bounds the worst-case *total cost* c^T x + Q_O(x,z),
+      - t^F bounds the worst-case *feasibility penalty* Q_F(x,z) only
+        (no first-stage cost, no shipping cost),
+      - M_pi bounds the dual capacity multipliers pi_i for open facilities.
 
-    Heuristic derivation (but reasonably tight):
-
-    Let:
-      D_high_j = max possible demand RHS at customer j
-               = max_k ( D_bar_j + D_hat_j * z_{j,k} ).
-    Let:
-      sum_D_high = sum_j D_high_j
-      n_fac      = number of facilities
-      max_d      = max_{i,j} d_ij
-      sum_c      = sum_i c_i
-
-    For the optimality block primal:
-        t^O >= sum_i c_i x_i + sum_{i,j} d_ij y^O_{ij}
-      with 0 <= y^O_{ij} <= D_high_j and sum_i y^O_{ij} >= D_high_j (roughly).
-      A coarse upper bound:
-        t^O <= sum_c + max_d * n_fac * sum_D_high
-
-    For the feasibility block primal:
-        t^F >= sum_i c_i x_i
-              + sum_{i,j} d_ij y^F_{ij}
-              + rho_D sum_j u_j
-              + rho_P sum_i v_i
-      With:
-        0 <= y^F_{ij} <= D_high_j,
-        0 <= u_j <= D_high_j,
-        0 <= v_i <= sum_D_high
-      we get:
-        t^F <= sum_c
-               + max_d * n_fac * sum_D_high
-               + rho_D * sum_D_high
-               + rho_P * n_fac * sum_D_high
-
-    For M_pi, we use:
-        M_pi = max_d
-    which is a standard bound for dual capacity-like variables.
+    Notation:
+      D_j^max  = max_k ( D_bar_j + D_hat_j * z_{j,k} )
+      sum_Dmax = sum_j D_j^max
+      n_fac    = number of facilities
+      max_d    = max_{i,j} d_ij
+      sum_c    = sum_i c_i
     """
     n_fac = len(opening_cost)
     m_cust = len(D_bar)
 
-    # max d_ij
+    # -----------------------------
+    # 1) max d_ij
+    # -----------------------------
     max_d = 0.0
     for i in range(n_fac):
         for j in range(m_cust):
             if ship_cost[i][j] > max_d:
                 max_d = ship_cost[i][j]
 
-    # D_high_j based on vertices
+    # -----------------------------
+    # 2) D_j^max across vertices
+    #    z_vertices has shape (m_cust, K)
+    # -----------------------------
     D_high = []
     for j in range(m_cust):
         max_z_j = max(z_vertices[j, k] for k in range(z_vertices.shape[1]))
@@ -390,22 +366,63 @@ def compute_big_M_constants_exact2ro_IR(
 
     sum_D_high = sum(D_high)
     sum_c = sum(opening_cost[i] for i in range(n_fac))
+    sum_P = sum(capacity[i] for i in range(n_fac))
 
-    # Upper bound for t^O
-    M_opt = sum_c + max_d * n_fac * sum_D_high
+    # -----------------------------
+    # 3) Upper bound for t^O
+    #
+    # For any (x,z):
+    #   Q_O(x,z) <= max_d * sum_D_high
+    #   c^T x    <= sum_c
+    # so
+    #   t^O <= sum_c + max_d * sum_D_high
+    # We use this both as a global upper bound on t^O and as M_opt.
+    # -----------------------------
+    flow_cost_ub = max_d * sum_D_high
+    tO_max = sum_c + flow_cost_ub
+    M_opt = tO_max
 
-    # Upper bound for t^F (includes slack penalties)
-    M_feas = (
-        sum_c
-        + max_d * n_fac * sum_D_high
-        + rho_D * sum_D_high
-        + rho_P * n_fac * sum_D_high
-    )
+    # -----------------------------
+    # 4) Upper bound for t^F
+    #
+    # Q_F(x,z) = rho_D sum_j u_j + rho_P sum_i v_i
+    # with 0 <= u_j <= D_j^max, 0 <= v_i <= sum_D_high.
+    # Hence:
+    #   sum_j u_j <= sum_D_high
+    #   sum_i v_i <= n_fac * sum_D_high
+    # therefore
+    #   Q_F(x,z) <= rho_D * sum_D_high + rho_P * n_fac * sum_D_high.
+    # We take this as M_feas.
+    # -----------------------------
+    tF_max = rho_D * sum_D_high + rho_P * n_fac * sum_D_high
+    M_feas = tF_max
 
-    # Big-M for kappa / pi linkage
-    M_pi = max_d if max_d > 0 else 1.0
+    # -----------------------------
+    # 5) Upper bound for pi_i (M_pi)
+    #
+    # Dual objective for Q_O is bounded above by tO_max = sum_c + max_d * sum_D_high.
+    # For any optimal dual (lambda, pi),
+    #   c^T x + sum_j demand_j * lambda_j - sum_i P_i x_i pi_i <= tO_max,
+    # and the first two terms are >= 0, so for any open facility i:
+    #   P_i * pi_i <= tO_max  =>  pi_i <= tO_max / P_i.
+    # Thus pi_i^* <= tO_max / P_min, where P_min is the smallest positive capacity.
+    # We define:
+    #   M_pi = tO_max / max(1.0, P_min)
+    # as a valid upper bound for pi_i on open facilities.
+    # -----------------------------
+    pos_caps = [P for P in capacity if P > 0]
+    if pos_caps:
+        P_min = min(pos_caps)
+    else:
+        # degenerate case, avoid division by zero;
+        # if all capacities are zero, pi_i is irrelevant in the dual objective.
+        P_min = 1.0
+
+    UB_total = tO_max
+    M_pi = UB_total / P_min
 
     return M_opt, M_feas, M_pi
+
 
 
 def add_variables_exact2ro_IR(

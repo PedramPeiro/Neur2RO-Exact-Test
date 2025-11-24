@@ -3,7 +3,7 @@
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=10
 #SBATCH --cpus-per-task=1
-#SBATCH --time=6:00:00
+#SBATCH --time=10:00:00
 #SBATCH --job-name=Exact2RO_IR_n4m12
 #SBATCH --output=Exact2RO_IR_n4m12_%j.out
 #SBATCH --mail-type=END,FAIL
@@ -61,19 +61,30 @@ chmod +x run_exact2ro_IR_n4m12_worker.sh
 
 # ===== Instance & Gamma lists =====
 INSTANCES=(IR_n4_m12_rep{0..29})
-GAMMAS=(1 2 3 4 11 12)
+GAMMAS=(1 2 3 12)
 
 # ===== Run in parallel =====
-NPROCS="${SLURM_NTASKS_PER_NODE}"
+NPROCS="${SLURM_NTASKS_PER_NODE:-10}"
 echo "Running GNU parallel with -j ${NPROCS}"
 
+# Temporarily disable 'exit on error' so a non-zero exit from parallel
+# does not kill the whole SLURM job.
+set +e
 parallel -j "${NPROCS}" --verbose \
   --joblog TrilliumResults/exact2ro_IR_n4m12.log \
   --results TrilliumResults/parallel_out/{#}_{1}_G{2} \
   --wd "$PWD" \
-  --halt now,fail=1 \
   --ungroup \
   ./run_exact2ro_IR_n4m12_worker.sh {1} {2} ::: "${INSTANCES[@]}" ::: "${GAMMAS[@]}"
+parallel_exit=$?
+set -e
 
-echo "All exact2ro_IR instances processed (up to ${NPROCS} concurrent)."
+if (( parallel_exit != 0 )); then
+    echo "WARNING: GNU parallel reported failures (exit code = ${parallel_exit})."
+    echo "Check TrilliumResults/exact2ro_IR_n4m12.log for which jobs failed."
+else
+    echo "All exact2ro_IR instances processed successfully (up to ${NPROCS} concurrent)."
+fi
+
 tail -n 20 TrilliumResults/exact2ro_IR_n4m12.log || true
+
